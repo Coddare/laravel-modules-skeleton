@@ -134,9 +134,9 @@ function run() {
             clearAndDeleteAll)
                 # Validar se usuário tem certeza que deseja deseja remover tudo.
                 confirmationYesNo
-                sudo docker-compose -f $COMPOSE_FILE down --volumes
+                docker-compose -f $COMPOSE_FILE down --volumes
                 #TODO: executar rm de imagens do docker-compose
-                sudo docker rmi -f ${APP_NAME}/php:${PHP_VERSION}
+                docker rmi -f ${APP_NAME}/php:${PHP_VERSION}
                 ;;
             *) echo "USAGE: (star | stop | clear | enter-db | enter-web)
   start     :: Build and Start the stack
