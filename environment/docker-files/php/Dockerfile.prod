@@ -29,20 +29,26 @@ ENV VIRTUAL_HOST=${VIRTUAL_HOST}
 #VIRTUAL_HOST_PATH
 ENV VIRTUAL_HOST_PATH=/etc/apache2/sites-enabled/site.conf
 
-#Vim, pdo_mysql
 RUN apt-get update && apt-get install -y \
-		vim \
-		#Git
-		git \
-		# Lib p/ zip
-		libzip-dev  \
-		zip \
-		#Mysql, pdo_mysql, mysqli, zip
-		&& docker-php-ext-configure zip --with-libzip \		
-		&& docker-php-ext-install pdo_mysql mysqli zip \
-		#clear cache
-		&& apt-get clean \
-		&& rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+	#Vim
+	vim \
+	#Git
+	git \
+	# Lib p/ zip
+        libzip-dev  \
+        zip \
+        # imagem
+        libfreetype6-dev \
+        libjpeg62-turbo-dev \
+        libpng-dev \
+	#Mysql
+	&& docker-php-ext-configure zip --with-libzip \
+	&& docker-php-ext-install pdo_mysql zip \
+        && docker-php-ext-configure gd --with-freetype-dir=/usr/include/ --with-jpeg-dir=/usr/include/ \
+        && docker-php-ext-install -j$(nproc) gd \
+	#clear cache
+	&& apt-get clean \
+	&& rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 #apache2 rewrite
 RUN a2enmod rewrite
@@ -58,7 +64,7 @@ RUN sed -i "s,ServerAlias app.*,ServerAlias ${VIRTUAL_HOST},g" ${VIRTUAL_HOST_PA
  && sed -i "s,ServerAlias \*.app.*,ServerAlias *.${VIRTUAL_HOST},g" ${VIRTUAL_HOST_PATH}
 
 # Criação usuário mesmo nome host, sem password
-RUN adduser --uid ${USER_ID} --gecos ${USER} --no-create-home --home ${PHP_WORK_DIR} --disabled-password ${USER}
+RUN adduser --uid ${USER_ID} --gecos ${USER} --disabled-password ${USER}
 
 # Composer
 RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" \

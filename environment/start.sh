@@ -1,17 +1,28 @@
 #!/bin/bash
+#espera que arquivo .env esteja em um diretório acima (raiz projeto)
+ENV_FILE=$(pwd)/../.env
+# 1. Check if .env file exists
+if [ -e ${ENV_FILE} ]; then
+    source ${ENV_FILE}
+else
+    echo "Please set up your .env file before starting your enviornment."
+    exit 1
+fi
+
+# 2. Check if proxy is running
+
 INSTALLED_DOCKER=$(which docker)
 INSTALLED_DOCKER_COMPOSE=$(which docker-compose)
 OPTION=$1
 LOGIN_AS_USER=$2
-#espera que arquivo .env esteja em um diretório acima (raiz projeto)
-export ENV_FILE=$(pwd)/../.env
 COMPOSE_FILE=docker-composes/app.yml
-COMPOSE_NGINX_PROXY=docker-composes/nginx-proxy.yml
+COMPOSE_PROD_FILE=docker-composes/app-prod.yml
+COMPOSE_DEV=" -f ${COMPOSE_FILE}"
+COMPOSE_PROD=" -f ${COMPOSE_FILE} -f ${COMPOSE_PROD_FILE}"
+
 CONT_NGINX_PROXY_NAME=nginx-proxy
 COMPOSE_LOGGLY=docker-composes/loggly.yml
 CONT_LOGGLY_NAME=loggly
-
-
 
 # Verificar se docker está instalado, caso não esteja, instalar
 if [ ! -e "$INSTALLED_DOCKER" ]; then
@@ -23,28 +34,31 @@ fi
 
 # Verificar se docker-compose está instalado, caso não esteja, instalar
 if [ ! -e "$INSTALLED_DOCKER_COMPOSE" ]; then
-   #instalar 
+   #instalar
    INSTALLED_CURL=$(which curl)
    if [ ! -e "$INSTALLED_CURL" ]; then
        sudo apt-get update && sudo apt-get install curl -y
    fi
-   
+
    sudo curl -L https://github.com/docker/compose/releases/download/1.20.1/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
 
    sudo chmod +x /usr/local/bin/docker-compose
-fi       
+fi
 
 
 # Verifica se container do nginx-proxy (monitorar containers/sites e apontar p/ porta 80) está rodando
-runNginxProxy() {
+verifyWebProxy() {
   if [ ! "$(docker ps -q -f name=${CONT_NGINX_PROXY_NAME})" ]; then
-    if [ "$(docker ps -aq -f status=exited -f name=${CONT_NGINX_PROXY_NAME})" ]; then
-        # cleanup
-        docker rm $CONT_NGINX_PROXY_NAME
+    echo "Container web proxy não está rodando e é necessário"
+    echo "1- Clonar repository: https://github.com/fredericomartini-docker-libraries/docker-compose-letsencrypt-nginx-proxy-companion"
+    echo "2- Criar copia do .env"
+    echo "cp -R .env.sample .env"
+    if [ "$ENVIRONMENT" = "prod" ] && [ "$USE_HTTPS"  = "true" ]; then
+        echo "Alterar IP: IP=0.0.0.0 p/ o do HOST"
     fi
-    # run your container
-    docker-compose -f $COMPOSE_NGINX_PROXY up --no-start
-    docker-compose -f $COMPOSE_NGINX_PROXY start
+    echo "3- Executar script p/ subir containers"
+    echo "./start.sh"
+    exit 1
   fi
 
 }
@@ -72,7 +86,7 @@ configureSyslog(){
 
 # Exporta variáveis para ficarem disponíveis no terminal e assim serem utilizadas
 function exportEnvVars() {
-    export $(egrep -v '^#' $ENV_FILE | xargs)    
+    export $(egrep -v '^#' $ENV_FILE | xargs)
     #exporta varíáveis que ñ estão presente no .env diretamente, mas são utilizadas
     export USER_ID=$(id -u)
     export GROUP_ID=$(id -g)
@@ -83,49 +97,58 @@ function confirmationYesNo(){
   read -p "Tem certeza que deseja remover container e os volumes (dados em database serão perdidos) Operação não poderá ser desfeita
  Confirma (y/n)?" choice
 
-  case "$choice" in 
+  case "$choice" in
     y|Y )
-    
+
       ;;
-    n|N ) 
+    n|N )
       exit 0
       ;;
-      * ) 
+      * )
       echo "invalid"
       exit 0
     ;;
   esac
 }
 
+function compose_file(){
+    # prod e usar https
+    if [ "$ENVIRONMENT" = "prod" ] && [ "$USE_HTTPS"  = "true" ]; then
+        COMPOSE_FILE=${COMPOSE_PROD}
+    else
+        COMPOSE_FILE=${COMPOSE_DEV}
+    fi
+}
+
 # Verifica opção do usuário
 function run() {
     case $OPTION in
-            start) 
-                docker-compose -f $COMPOSE_FILE down
+            start)
                 # Verificar se container proxy rodando, caso ñ rodar
-                runNginxProxy
+                verifyWebProxy
                 # Verificar se container loggly rodando, caso ñ rodar
                 # runLoggly
-                docker-compose -f $COMPOSE_FILE up --no-start --build
-                docker-compose -f $COMPOSE_FILE start
+                docker-compose ${COMPOSE_FILE} down
+                docker-compose ${COMPOSE_FILE} up --no-start --build
+                docker-compose ${COMPOSE_FILE} start
+
                 #remover imagens sem name/tag
                 docker rmi -f $(docker images -a  |grep "<none>") > /dev/null 2>&1
                 ;;
-            stop) 
-                docker-compose -f $COMPOSE_FILE stop
+            stop)
+                docker-compose ${COMPOSE_FILE} stop
                 ;;
             clear)
-                docker-compose -f $COMPOSE_FILE down
+                docker-compose ${COMPOSE_FILE} down
                 #TODO: executar rm de imagens do docker-compose
                  docker rmi ${APP_NAME}/php:${PHP_VERSION}
                 ;;
             enter-db)
-                # echo $(pwd);
                 docker exec -it $(docker ps -q -f name=${APP_NAME}_db_1) bash
                 ;;
             db-ip)
                 docker inspect $(docker ps -q -f name=${APP_NAME}_db_1) |grep IPAddress
-                ;;                
+                ;;
             enter-web)
                 # User default (logado) ou usuários especificado 'root'
                 docker exec -it --user=${LOGIN_AS_USER:-$USER} $(docker ps -q -f name=${APP_NAME}_web_1) bash
@@ -134,7 +157,7 @@ function run() {
             clearAndDeleteAll)
                 # Validar se usuário tem certeza que deseja deseja remover tudo.
                 confirmationYesNo
-                docker-compose -f $COMPOSE_FILE down --volumes
+                docker-compose ${COMPOSE_FILE} down --volumes
                 #TODO: executar rm de imagens do docker-compose
                 docker rmi -f ${APP_NAME}/php:${PHP_VERSION}
                 ;;
@@ -146,9 +169,12 @@ function run() {
   enter-db  :: Get into the database container to run commands like (mysql -v, mysql -u)
   db-ip     :: Show the database IPAddress
   enter-web :: Get into the web container to run commands like (php -v, composer install)"
+
     esac
 }
 
 exportEnvVars
+#seta env_file p/ prod ou dev
+compose_file
 #configureSyslog #rodar somente uma vez e em produção
 run

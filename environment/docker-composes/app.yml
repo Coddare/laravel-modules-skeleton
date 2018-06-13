@@ -8,14 +8,16 @@ version: "3"
 services:
   db:
     image: mysql:${MYSQL_VERSION}
-    network_mode: bridge
+    restart: on-failure
     volumes:
       - db_data:/var/lib/mysql
+      - ../config/mysql/:/etc/mysql/conf.d
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
       MYSQL_DATABASE: ${DB_DATABASE}
       MYSQL_USER: ${DB_USERNAME}
       MYSQL_PASSWORD: ${DB_PASSWORD}
+      TZ: America/Sao_Paulo
     logging:
       driver: "syslog" #"json-file"
       options:
@@ -34,7 +36,6 @@ services:
         - "APACHE_RUN_GROUP=${USER}"
         - "VIRTUAL_HOST=${VIRTUAL_HOST}"
     image: ${APP_NAME}/php:${PHP_VERSION}
-    network_mode: bridge
     #dependencias
     depends_on:
       - db
@@ -43,9 +44,14 @@ services:
       - ../../:${PHP_WORK_DIR}
     environment:
       VIRTUAL_HOST: ${VIRTUAL_HOST}
+      TZ: America/Sao_Paulo
     logging:
       driver: "syslog" #"json-file"
       options:
         tag: "{{.ImageName}}\\{{.Name}}\\{{.ID}}"
 volumes:
   db_data:
+networks:
+  default:
+    external:
+      name: ${NETWORK:-webproxy}
