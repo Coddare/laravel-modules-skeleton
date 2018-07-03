@@ -144,14 +144,14 @@ function run() {
                  docker rmi ${APP_NAME}/php:${PHP_VERSION}
                 ;;
             enter-db)
-                docker exec -it $(docker ps -q -f name=${APP_NAME}_db_1) bash
+                docker exec -e COLUMNS="`tput cols`" -e LINES="`tput lines`" -it $(docker ps -q -f name=${APP_NAME}_db_1) bash
                 ;;
             db-ip)
                 docker inspect $(docker ps -q -f name=${APP_NAME}_db_1) |grep IPAddress
                 ;;
             enter-web)
                 # User default (logado) ou usuários especificado 'root'
-                docker exec -it --user=${LOGIN_AS_USER:-$USER} $(docker ps -q -f name=${APP_NAME}_web_1) bash
+                docker exec -e COLUMNS="`tput cols`" -e LINES="`tput lines`" -it --user=${LOGIN_AS_USER:-$USER} $(docker ps -q -f name=${APP_NAME}_web_1) bash
 
                 ;;
             clearAndDeleteAll)
